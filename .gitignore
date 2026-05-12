@@ -1,0 +1,14 @@
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.spec
+build/
+dist/
+game/
+start.bash
+desktop.sh
+uninstall.sh
+*.bak
+SMBRemapStudio
+SuperMeatBoyRemapTool

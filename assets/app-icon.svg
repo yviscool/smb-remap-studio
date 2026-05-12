@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256" fill="none">
+  <rect width="256" height="256" rx="56" fill="#F4F7FB"/>
+  <rect x="28" y="44" width="200" height="168" rx="32" fill="#2D6DF6"/>
+  <rect x="44" y="62" width="168" height="132" rx="24" fill="#FFFFFF"/>
+  <rect x="62" y="84" width="28" height="22" rx="8" fill="#DCE8FF"/>
+  <rect x="98" y="84" width="28" height="22" rx="8" fill="#DCE8FF"/>
+  <rect x="134" y="84" width="28" height="22" rx="8" fill="#DCE8FF"/>
+  <rect x="170" y="84" width="24" height="22" rx="8" fill="#FFB287"/>
+  <rect x="62" y="118" width="28" height="22" rx="8" fill="#DCE8FF"/>
+  <rect x="98" y="118" width="64" height="22" rx="8" fill="#9DBDFF"/>
+  <rect x="170" y="118" width="24" height="22" rx="8" fill="#FFD8C2"/>
+  <rect x="62" y="152" width="96" height="22" rx="8" fill="#DCE8FF"/>
+  <path d="M195.743 150.828L201.4 156.486L186.55 171.336L201.4 186.186L195.743 191.843L180.893 176.993L166.043 191.843L160.386 186.186L175.236 171.336L160.386 156.486L166.043 150.828L180.893 165.679L195.743 150.828Z" fill="#FF7A59"/>
+</svg>
