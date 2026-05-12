@@ -10,5 +10,6 @@ start.bash
 desktop.sh
 uninstall.sh
 *.bak
+*.sha256
 SMBRemapStudio
 SuperMeatBoyRemapTool
