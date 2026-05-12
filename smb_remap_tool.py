@@ -15,7 +15,17 @@ from pathlib import Path
 from string import ascii_lowercase, digits
 from typing import Iterable
 
-from PySide6.QtCore import QProcess, QSettings, QStringListModel, Qt, QUrl
+os.environ.setdefault("PYGAME_HIDE_SUPPORT_PROMPT", "1")
+
+try:
+    import pygame
+except Exception as exc:  # pragma: no cover - optional runtime dependency
+    pygame = None
+    PYGAME_IMPORT_ERROR = exc
+else:
+    PYGAME_IMPORT_ERROR = None
+
+from PySide6.QtCore import QProcess, QSettings, QStringListModel, Qt, QTimer, QUrl
 from PySide6.QtGui import QDesktopServices, QFont, QIcon, QKeyEvent
 from PySide6.QtWidgets import (
     QApplication,
@@ -410,6 +420,10 @@ def describe_token(token: str) -> str:
     return normalized
 
 
+def gamepad_capture_backend_name() -> str:
+    return "pygame" if pygame is not None else "未安装"
+
+
 class TokenComboBox(QComboBox):
     def __init__(self, items: Iterable[TokenChoice], placeholder: str, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -493,6 +507,166 @@ class KeyCaptureDialog(QDialog):
             "background: #fff6f3; border: 1px solid #ffd0c2; border-radius: 12px; "
             "padding: 14px; font-weight: 600; color: #b04a2f;"
         )
+
+
+class GamepadCaptureDialog(QDialog):
+    def __init__(self, action_label: str, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.action_label = action_label
+        self.captured_token: str | None = None
+        self._joystick_names: dict[int, str] = {}
+        self._backend_ready = False
+
+        self.setWindowTitle(f"录入手柄按钮 - {action_label}")
+        self.setModal(True)
+        self.setMinimumWidth(520)
+
+        layout = QVBoxLayout(self)
+        title = QLabel(f"为“{action_label}”按下一个手柄按钮")
+        title.setStyleSheet("font-size: 18px; font-weight: 700;")
+        hint = QLabel(
+            "只识别物理按钮按下事件。这里会把 pygame 读到的 0 基按钮号自动换算成"
+            " Super Meat Boy 配置里使用的 1 基编号。"
+        )
+        hint.setWordWrap(True)
+        hint.setStyleSheet("color: #5f6b7a;")
+
+        self.backend_label = QLabel(f"检测后端：{gamepad_capture_backend_name()}")
+        self.backend_label.setStyleSheet("color: #325172; font-weight: 600;")
+        self.device_label = QLabel("正在扫描手柄…")
+        self.device_label.setWordWrap(True)
+        self.device_label.setStyleSheet(
+            "background: #f5f8ff; border: 1px solid #c8d8ff; border-radius: 12px; padding: 12px;"
+        )
+        self.result_label = QLabel("等待按下手柄按钮…")
+        self.result_label.setWordWrap(True)
+        self.result_label.setStyleSheet(
+            "background: #f5f8ff; border: 1px solid #c8d8ff; border-radius: 12px; "
+            "padding: 14px; font-weight: 600;"
+        )
+
+        self.refresh_button = QPushButton("重新扫描")
+        self.refresh_button.clicked.connect(self.initialize_backend)
+        cancel_button = QPushButton("取消")
+        cancel_button.clicked.connect(self.reject)
+
+        button_row = QHBoxLayout()
+        button_row.addWidget(self.refresh_button)
+        button_row.addStretch(1)
+        button_row.addWidget(cancel_button)
+
+        layout.addWidget(title)
+        layout.addWidget(hint)
+        layout.addWidget(self.backend_label)
+        layout.addWidget(self.device_label)
+        layout.addWidget(self.result_label)
+        layout.addLayout(button_row)
+
+        self.timer = QTimer(self)
+        self.timer.setInterval(20)
+        self.timer.timeout.connect(self.poll_events)
+
+        self.initialize_backend()
+
+    def initialize_backend(self) -> None:
+        self._backend_ready = False
+        self._joystick_names = {}
+        if pygame is None:
+            self.device_label.setText("当前环境未安装 pygame，无法使用手柄自动识别。")
+            self.result_label.setText("请运行 ./setup_remap_tool.sh 更新依赖，或重新下载最新打包版。")
+            self.result_label.setStyleSheet(
+                "background: #fff6f3; border: 1px solid #ffd0c2; border-radius: 12px; "
+                "padding: 14px; font-weight: 600; color: #b04a2f;"
+            )
+            return
+
+        try:
+            if not pygame.display.get_init():
+                pygame.display.init()
+            if not pygame.joystick.get_init():
+                pygame.joystick.init()
+            pygame.event.clear()
+            has_joystick = self.refresh_joysticks()
+            self._backend_ready = True
+            if has_joystick:
+                self.result_label.setText("等待按下手柄按钮…")
+                self.result_label.setStyleSheet(
+                    "background: #f5f8ff; border: 1px solid #c8d8ff; border-radius: 12px; "
+                    "padding: 14px; font-weight: 600;"
+                )
+            self.timer.start()
+        except Exception as exc:
+            self.device_label.setText(f"手柄扫描失败：{exc}")
+            self.result_label.setText("后端初始化失败。你仍然可以手动输入按钮编号。")
+            self.result_label.setStyleSheet(
+                "background: #fff6f3; border: 1px solid #ffd0c2; border-radius: 12px; "
+                "padding: 14px; font-weight: 600; color: #b04a2f;"
+            )
+
+    def refresh_joysticks(self) -> bool:
+        assert pygame is not None
+        self._joystick_names = {}
+        count = pygame.joystick.get_count()
+        if count <= 0:
+            self.device_label.setText("没有检测到手柄。插上手柄后点“重新扫描”，再按目标按钮。")
+            self.result_label.setText("当前没有可录入的手柄。插上手柄后重新扫描即可。")
+            self.result_label.setStyleSheet(
+                "background: #fffaf0; border: 1px solid #ffd88a; border-radius: 12px; "
+                "padding: 14px; font-weight: 600; color: #8a5a00;"
+            )
+            return False
+
+        names: list[str] = []
+        for index in range(count):
+            joystick = pygame.joystick.Joystick(index)
+            if not joystick.get_init():
+                joystick.init()
+            instance_id = joystick.get_instance_id() if hasattr(joystick, "get_instance_id") else index
+            name = joystick.get_name() or f"控制器 {index + 1}"
+            self._joystick_names[instance_id] = name
+            names.append(f"{index + 1}. {name}")
+        self.device_label.setText("已检测到手柄：\n" + "\n".join(names))
+        self.result_label.setText("已检测到手柄。现在按下目标按钮即可完成录入。")
+        self.result_label.setStyleSheet(
+            "background: #f5f8ff; border: 1px solid #c8d8ff; border-radius: 12px; "
+            "padding: 14px; font-weight: 600;"
+        )
+        return True
+
+    def poll_events(self) -> None:
+        if pygame is None or not self._backend_ready:
+            return
+        try:
+            pygame.event.pump()
+            events = pygame.event.get([pygame.JOYBUTTONDOWN, pygame.JOYDEVICEADDED, pygame.JOYDEVICEREMOVED])
+        except Exception as exc:
+            self.timer.stop()
+            self.device_label.setText(f"轮询失败：{exc}")
+            self.result_label.setText("手柄事件轮询中断。你仍然可以手动输入按钮编号。")
+            self.result_label.setStyleSheet(
+                "background: #fff6f3; border: 1px solid #ffd0c2; border-radius: 12px; "
+                "padding: 14px; font-weight: 600; color: #b04a2f;"
+            )
+            return
+
+        for event in events:
+            if event.type in {pygame.JOYDEVICEADDED, pygame.JOYDEVICEREMOVED}:
+                self.refresh_joysticks()
+                continue
+            if event.type == pygame.JOYBUTTONDOWN:
+                button_number = int(event.button) + 1
+                instance_id = getattr(event, "instance_id", getattr(event, "joy", -1))
+                joystick_name = self._joystick_names.get(instance_id, "未知手柄")
+                self.captured_token = str(button_number)
+                self.result_label.setText(
+                    f"已识别：{joystick_name} 的按钮 {button_number}\n将写入 token：{self.captured_token}"
+                )
+                self.accept()
+                return
+
+    def done(self, result: int) -> None:
+        self.timer.stop()
+        super().done(result)
 
 
 class MainWindow(QMainWindow):
@@ -638,8 +812,35 @@ class MainWindow(QMainWindow):
         self.pad_jump = TokenComboBox(GAMEPAD_CHOICES, "输入按钮编号，例如 1")
         self.pad_special = TokenComboBox(GAMEPAD_CHOICES, "输入按钮编号，例如 3")
         self.use_analog = QCheckBox("启用模拟摇杆")
-        layout.addRow("跳跃", self.pad_jump)
-        layout.addRow("冲刺 / 特殊", self.pad_special)
+        self.pad_capture_hint = QLabel(
+            "自动识别后端："
+            + gamepad_capture_backend_name()
+            + ("。可直接按下手柄按钮录入。" if pygame is not None else "。当前未安装，录入按钮会提示你更新依赖。")
+        )
+        self.pad_capture_hint.setWordWrap(True)
+        self.pad_capture_hint.setStyleSheet("color: #536171;")
+
+        jump_row = QWidget()
+        jump_layout = QHBoxLayout(jump_row)
+        jump_layout.setContentsMargins(0, 0, 0, 0)
+        jump_layout.setSpacing(10)
+        jump_layout.addWidget(self.pad_jump, 1)
+        jump_button = QPushButton("录入按钮")
+        jump_button.clicked.connect(lambda: self.capture_gamepad_binding("jump"))
+        jump_layout.addWidget(jump_button)
+
+        special_row = QWidget()
+        special_layout = QHBoxLayout(special_row)
+        special_layout.setContentsMargins(0, 0, 0, 0)
+        special_layout.setSpacing(10)
+        special_layout.addWidget(self.pad_special, 1)
+        special_button = QPushButton("录入按钮")
+        special_button.clicked.connect(lambda: self.capture_gamepad_binding("special"))
+        special_layout.addWidget(special_button)
+
+        layout.addRow("", self.pad_capture_hint)
+        layout.addRow("跳跃", jump_row)
+        layout.addRow("冲刺 / 特殊", special_row)
         layout.addRow("", self.use_analog)
         return group
 
@@ -650,6 +851,7 @@ class MainWindow(QMainWindow):
             "这不是系统级按键劫持器，只会改游戏自己的 buttonmap.cfg。"
             "你可以用预设快速套用，也可以搜索“空格 / shift / a / pageup”这类键名。"
             "如果下拉框里没有你要的值，还能直接输入原始 token。"
+            "手柄按钮自动识别依赖 pygame；识别到的按钮号会自动转换成游戏配置使用的 1 基编号。"
         )
         note.setWordWrap(True)
         note.setStyleSheet("color: #536171; line-height: 1.5;")
@@ -873,6 +1075,25 @@ class MainWindow(QMainWindow):
         if dialog.exec() == QDialog.Accepted and dialog.captured_token:
             self.keyboard_fields[action].set_token(dialog.captured_token)
             self.set_status(f"已为“{ACTION_LABELS[action]}”录入：{describe_token(dialog.captured_token)}。")
+
+    def capture_gamepad_binding(self, action: str) -> None:
+        if pygame is None:
+            reason = str(PYGAME_IMPORT_ERROR) if PYGAME_IMPORT_ERROR else "未知原因"
+            QMessageBox.information(
+                self,
+                APP_NAME,
+                "当前环境还没有可用的手柄识别后端。\n\n"
+                f"原因：{reason}\n\n"
+                "请运行 ./setup_remap_tool.sh 更新依赖，或使用最新打包版。",
+            )
+            return
+
+        label = "跳跃" if action == "jump" else "冲刺 / 特殊"
+        dialog = GamepadCaptureDialog(label, self)
+        if dialog.exec() == QDialog.Accepted and dialog.captured_token:
+            target = self.pad_jump if action == "jump" else self.pad_special
+            target.set_token(dialog.captured_token)
+            self.set_status(f"已为“{label}”录入手柄按钮：{dialog.captured_token}。")
 
     def restore_defaults(self) -> None:
         self.populate_fields(DEFAULT_CONFIG)
