@@ -10,18 +10,15 @@ if [ ! -x ".venv/bin/python" ]; then
     exit 1
 fi
 
-.venv/bin/pip install pyinstaller
+.venv/bin/python -m pip install -r requirements-build.txt
 
-rm -rf build dist smb_remap_tool.spec
+if ! .venv/bin/python -m pip install --only-binary=:all: -r requirements-optional.txt; then
+    echo "警告：可选依赖 pygame 安装失败，本次打包将不包含手柄自动识别。"
+fi
 
-.venv/bin/pyinstaller \
-    --noconfirm \
-    --clean \
-    --windowed \
-    --onefile \
-    --name SMBRemapStudio \
-    --add-data assets:assets \
-    smb_remap_tool.py
+rm -rf build dist
+
+.venv/bin/python -m PyInstaller --noconfirm --clean smb_remap_tool.spec
 
 cp -f dist/SMBRemapStudio "$SCRIPT_DIR/SMBRemapStudio"
 chmod +x "$SCRIPT_DIR/SMBRemapStudio"

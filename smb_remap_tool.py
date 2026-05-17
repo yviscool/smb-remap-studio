@@ -51,6 +51,7 @@ from PySide6.QtWidgets import (
 
 APP_NAME = "SMB Remap Studio"
 ORG_NAME = "tmac"
+IS_WINDOWS = sys.platform.startswith("win")
 
 KEYBOARD_ORDER = ["up", "down", "left", "right", "jump", "special"]
 GAMEPAD_ORDER = ["jump", "special", "useanalog"]
@@ -174,6 +175,54 @@ def detect_default_root() -> Path | None:
     return None
 
 
+def find_parent_root(game_dir: Path) -> Path:
+    parent = game_dir.parent
+    parent_markers = [
+        parent / "start.bash",
+        parent / "SuperMeatBoy.exe",
+    ]
+    if game_dir.name == "game" and any(marker.is_file() for marker in parent_markers):
+        return parent
+    return game_dir
+
+
+def detect_launch_target(root_dir: Path, game_dir: Path) -> tuple[Path | None, Path | None]:
+    candidates: list[tuple[Path, Path]] = []
+
+    windows_candidates = [
+        (root_dir / "SuperMeatBoy.exe", root_dir),
+        (game_dir / "SuperMeatBoy.exe", game_dir),
+    ]
+    linux_candidates = []
+    if (root_dir / "start.bash").is_file():
+        linux_candidates.append((root_dir / "start.bash", root_dir))
+
+    arch = platform.machine().lower()
+    if arch in {"x86_64", "amd64"}:
+        linux_candidates.extend(
+            [
+                (game_dir / "amd64" / "SuperMeatBoy", game_dir),
+                (game_dir / "x86" / "SuperMeatBoy", game_dir),
+            ]
+        )
+    else:
+        linux_candidates.extend(
+            [
+                (game_dir / "x86" / "SuperMeatBoy", game_dir),
+                (game_dir / "amd64" / "SuperMeatBoy", game_dir),
+            ]
+        )
+
+    candidates.extend(windows_candidates if IS_WINDOWS else linux_candidates)
+    candidates.extend(linux_candidates if IS_WINDOWS else windows_candidates)
+    launch_program, launch_cwd = next(((program, cwd) for program, cwd in candidates if program.is_file()), (None, None))
+    return launch_program, launch_cwd
+
+
+def dependency_update_hint() -> str:
+    return "请运行仓库里的 setup 脚本更新依赖，或使用最新打包版。"
+
+
 def resolve_game_layout(selected_dir: os.PathLike[str] | str) -> GameLayout:
     path = Path(selected_dir).expanduser().resolve()
 
@@ -182,30 +231,19 @@ def resolve_game_layout(selected_dir: os.PathLike[str] | str) -> GameLayout:
         game_dir = path / "game"
     elif (path / "buttonmap.cfg").is_file():
         game_dir = path
-        root_dir = path.parent if path.name == "game" and (path.parent / "start.bash").exists() else path
+        root_dir = find_parent_root(path)
     else:
-        raise ConfigError("未找到 buttonmap.cfg。请选择包含 game/ 目录的根目录，或直接选择 game 目录。")
+        raise ConfigError("未找到 buttonmap.cfg。请选择游戏安装根目录，或直接选择包含 buttonmap.cfg 的目录。")
 
     config_path = game_dir / "buttonmap.cfg"
-    icon_candidates = [game_dir / "icon.png", root_dir / "game" / "icon.png"]
+    icon_candidates = [
+        game_dir / "icon.png",
+        root_dir / "icon.png",
+        root_dir / "game" / "icon.png",
+    ]
     icon_path = next((item for item in icon_candidates if item.is_file()), None)
 
-    launch_program: Path | None = None
-    launch_cwd: Path | None = None
-    if (root_dir / "start.bash").is_file():
-        launch_program = root_dir / "start.bash"
-        launch_cwd = root_dir
-    else:
-        arch = platform.machine().lower()
-        binary_candidates: list[Path] = []
-        if arch in {"x86_64", "amd64"}:
-            binary_candidates.append(game_dir / "amd64" / "SuperMeatBoy")
-            binary_candidates.append(game_dir / "x86" / "SuperMeatBoy")
-        else:
-            binary_candidates.append(game_dir / "x86" / "SuperMeatBoy")
-            binary_candidates.append(game_dir / "amd64" / "SuperMeatBoy")
-        launch_program = next((item for item in binary_candidates if item.is_file()), None)
-        launch_cwd = game_dir if launch_program else None
+    launch_program, launch_cwd = detect_launch_target(root_dir, game_dir)
 
     return GameLayout(
         root_dir=root_dir,
@@ -573,7 +611,7 @@ class GamepadCaptureDialog(QDialog):
         self._joystick_names = {}
         if pygame is None:
             self.device_label.setText("当前环境未安装 pygame，无法使用手柄自动识别。")
-            self.result_label.setText("请运行 ./setup_remap_tool.sh 更新依赖，或重新下载最新打包版。")
+            self.result_label.setText(dependency_update_hint())
             self.result_label.setStyleSheet(
                 "background: #fff6f3; border: 1px solid #ffd0c2; border-radius: 12px; "
                 "padding: 14px; font-weight: 600; color: #b04a2f;"
@@ -712,7 +750,7 @@ class MainWindow(QMainWindow):
         title = QLabel("SMB Remap Studio")
         title.setObjectName("heroTitle")
         subtitle = QLabel(
-            "为 Linux 上的 Super Meat Boy 做一个真正顺手的改键器。"
+            "为桌面版 Super Meat Boy 做一个真正顺手的改键器。"
             "支持搜索、直接录键、快速预设、备份和一键启动。"
         )
         subtitle.setWordWrap(True)
@@ -1084,7 +1122,7 @@ class MainWindow(QMainWindow):
                 APP_NAME,
                 "当前环境还没有可用的手柄识别后端。\n\n"
                 f"原因：{reason}\n\n"
-                "请运行 ./setup_remap_tool.sh 更新依赖，或使用最新打包版。",
+                + dependency_update_hint(),
             )
             return
 
@@ -1174,7 +1212,11 @@ class MainWindow(QMainWindow):
             str(self.game_layout.launch_cwd or self.game_layout.root_dir),
         )
         if not ok:
-            QMessageBox.critical(self, APP_NAME, "启动失败，请检查 start.bash 或游戏二进制是否可执行。")
+            QMessageBox.critical(
+                self,
+                APP_NAME,
+                "启动失败，请检查 start.bash、SuperMeatBoy.exe 或 Linux 游戏二进制是否可执行。",
+            )
             return
         self.set_status(f"已启动游戏：{self.game_layout.launch_program}")
 

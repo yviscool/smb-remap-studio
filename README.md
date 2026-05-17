@@ -1,8 +1,8 @@
 # SMB Remap Studio
 
-非官方的 `Super Meat Boy` Linux 改键工具，基于 `Python + PySide6`。
+非官方的 `Super Meat Boy` 桌面版改键工具，基于 `Python + PySide6`。
 
-它不是系统级键盘 Hook，也不会改 deepin / Linux 的全局按键行为。  
+支持 `Linux` 和 `Windows`。它不是系统级键盘 Hook，也不会改系统全局按键行为。
 它只负责读写游戏自己的 `buttonmap.cfg`，因此稳定、直接、可控。
 
 ![主界面截图](screenshots/main-window.png)
@@ -16,7 +16,7 @@
 - 内置多套键盘 / 手柄预设
 - 保存前自动备份 `buttonmap.cfg.bak`
 - 支持一键启动游戏
-- 可打包成单文件 Linux 可执行程序，直接放到游戏目录运行
+- 可打包成单文件 `Linux` / `Windows` 可执行程序
 
 ## 原理
 
@@ -44,24 +44,52 @@ SuperMeatBoy/
     └── x86/SuperMeatBoy
 ```
 
-也支持把源码仓库放在别处运行，然后在界面里手动选择游戏目录。
+```text
+SuperMeatBoy/
+├── SMBRemapStudio.exe
+├── SuperMeatBoy.exe
+└── buttonmap.cfg
+```
+
+也支持把源码仓库放在别处运行，然后在界面里手动选择游戏目录或 `buttonmap.cfg` 所在目录。
 
 ## 快速开始
 
-### 方式 1：直接运行源码
+### Linux：直接运行源码
 
 ```bash
 ./setup_remap_tool.sh
 ./run_remap_tool.sh
 ```
 
-### 方式 2：打包成单文件程序
+### Windows：直接运行源码
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\setup_remap_tool.ps1
+powershell -ExecutionPolicy Bypass -File .\run_remap_tool.ps1
+```
+
+也可以直接运行仓库里的 `setup_remap_tool.cmd` 和 `run_remap_tool.cmd`。
+
+### Linux：打包单文件程序
 
 ```bash
 ./build_standalone.sh
 ```
 
-生成的 `SMBRemapStudio` 可以直接复制到游戏根目录中运行。
+### Windows：打包单文件程序
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\build_standalone.ps1
+```
+
+生成的 `SMBRemapStudio` / `SMBRemapStudio.exe` 可以直接复制到游戏目录中运行。
+
+## 依赖说明
+
+- `PySide6` 是必需依赖
+- `pygame` 是可选依赖，只影响“手柄按钮自动识别”
+- 如果 `pygame` 安装失败，你仍然可以正常读取、修改、保存 `buttonmap.cfg`，也可以手动输入手柄按钮编号
 
 ## 常见 token
 
@@ -104,6 +132,11 @@ SuperMeatBoy/
 ```bash
 QT_QPA_PLATFORM=offscreen .venv/bin/python smb_remap_tool.py --export-screenshot screenshots/main-window.png --root /path/to/SuperMeatBoy
 ```
+
+## CI / Release
+
+- GitHub Actions 会在 `Linux` 和 `Windows` 上执行 smoke test 并打包
+- 推送 `v*` tag 时，会自动把两个平台的产物上传到 GitHub Release
 
 ## 免责说明
 
