@@ -3,6 +3,7 @@ __pycache__/
 *.pyc
 *.pyo
 *.spec
+!smb_remap_tool.spec
 build/
 dist/
 game/
