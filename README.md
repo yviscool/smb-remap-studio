@@ -136,7 +136,8 @@ QT_QPA_PLATFORM=offscreen .venv/bin/python smb_remap_tool.py --export-screenshot
 ## CI / Release
 
 - GitHub Actions 会在 `Linux` 和 `Windows` 上执行 smoke test 并打包
-- 推送 `v*` tag 时，会自动把两个平台的产物上传到 GitHub Release
+- 每次 push 到 `main` 时，会自动更新 `main-latest` 预发布 release
+- 推送 `v*` tag 时，会自动创建对应的正式 GitHub Release
 
 ## 免责说明
 
