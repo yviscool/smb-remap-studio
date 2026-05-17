@@ -27,6 +27,7 @@ $optionalExitCode = Invoke-VenvPython -Args @("-m", "pip", "install", "--only-bi
 
 if ($optionalExitCode -ne 0) {
     Write-Warning "Optional dependency pygame could not be installed. This build will not include gamepad auto-detect."
+    $global:LASTEXITCODE = 0
 }
 
 foreach ($path in @("build", "dist")) {
@@ -42,3 +43,4 @@ $targetBinary = Join-Path $scriptDir "SMBRemapStudio.exe"
 Copy-Item -LiteralPath $builtBinary -Destination $targetBinary -Force
 
 Write-Host "Build complete: $targetBinary"
+exit 0

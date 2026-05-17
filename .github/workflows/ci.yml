@@ -25,11 +25,21 @@ jobs:
         with:
           python-version: "3.13"
 
+      - name: Install Linux Qt runtime dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libegl1 libgl1 libopengl0 libdbus-1-3 libxkbcommon-x11-0 libxcb-cursor0
+
       - name: Install dependencies
         run: bash ./setup_remap_tool.sh
 
-      - name: Verify gamepad backend
-        run: .venv/bin/python -c "import pygame"
+      - name: Check optional gamepad backend
+        run: |
+          if .venv/bin/python -c "import pygame"; then
+            echo "pygame backend available."
+          else
+            echo "::warning::pygame backend unavailable on Linux build; packaged app will still work without gamepad auto-detect."
+          fi
 
       - name: Smoke test
         env:
@@ -67,9 +77,17 @@ jobs:
         shell: powershell
         run: .\setup_remap_tool.ps1
 
-      - name: Verify gamepad backend
+      - name: Check optional gamepad backend
         shell: powershell
-        run: .\.venv\Scripts\python.exe -c "import pygame"
+        run: |
+          .\.venv\Scripts\python.exe -c "import pygame"
+          if ($LASTEXITCODE -eq 0) {
+            Write-Host "pygame backend available."
+          }
+          else {
+            Write-Host "::warning::pygame backend unavailable on Windows build; packaged app will still work without gamepad auto-detect."
+            exit 0
+          }
 
       - name: Smoke test
         shell: powershell

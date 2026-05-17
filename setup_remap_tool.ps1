@@ -18,11 +18,11 @@ function Invoke-VenvPython {
 }
 
 if (-not (Test-Path ".venv")) {
-    if (Get-Command py -ErrorAction SilentlyContinue) {
-        & py -3 -m venv .venv
-    }
-    elseif (Get-Command python -ErrorAction SilentlyContinue) {
+    if (Get-Command python -ErrorAction SilentlyContinue) {
         & python -m venv .venv
+    }
+    elseif (Get-Command py -ErrorAction SilentlyContinue) {
+        & py -3 -m venv .venv
     }
     else {
         throw "Python 3 was not found. Install Python 3 first."
@@ -40,7 +40,9 @@ $optionalExitCode = Invoke-VenvPython -Args @("-m", "pip", "install", "--only-bi
 if ($optionalExitCode -ne 0) {
     Write-Warning "Optional dependency pygame could not be installed. Gamepad auto-detect will be unavailable."
     Write-Warning "Reading, editing, and saving buttonmap.cfg still works."
+    $global:LASTEXITCODE = 0
 }
 
 Write-Host "Dependencies installed."
 Write-Host "Run with: powershell -ExecutionPolicy Bypass -File .\run_remap_tool.ps1"
+exit 0
